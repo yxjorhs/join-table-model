@@ -3,7 +3,7 @@
   "version": "0.0.2",
   "license": "ISC",
   "author": "yxjorhs",
-  "homepage": "https://github.com/yxjorhs/join-table-model",
+  "repository": "yxjorhs/join-table-model",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "files": [
