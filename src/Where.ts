@@ -1,6 +1,6 @@
 import Knex from 'knex';
 
-namespace where {
+namespace Where {
   type dataType = number | string | Date | boolean;
 
   export type ICondition =
@@ -34,7 +34,7 @@ namespace where {
   export type IWhere<
     TRecord extends Record<string, any> = Record<string, any>
   > = {
-    [K in keyof Partial<TRecord>]: ICondition;
+    [_K in keyof Partial<TRecord>]: ICondition;
   };
 
   /**
@@ -110,4 +110,4 @@ namespace where {
   }
 }
 
-export default where;
+export default Where;

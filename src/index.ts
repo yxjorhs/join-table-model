@@ -256,6 +256,8 @@ class JoinTableModel<
               `${ltableAlias}.${lfield}`,
               `${rtableAlias}.${rfield}`,
           );
+
+          join.set(joinKey, rtableAlias);
         }
 
         ltableAlias = rtableAlias;
