@@ -31,7 +31,7 @@ example
 import mysql from "mysql2";
 import JoinTableModel from "join-table-model"
 
-type Model = {
+type User = {
     id: number,
     nickname: string,
     user_phone: string
@@ -44,7 +44,7 @@ const connection = mysql.createConnection({
     password: '123456'
 })
 
-const jtm = new JoinTableModel<Model>({
+const user = new JoinTableModel<User>({
     table: 'user', // primary table name
     join: [ // register the join table rule and the field needed
         {
@@ -58,12 +58,12 @@ const jtm = new JoinTableModel<Model>({
 })
 
 async function main() {
-    const data = await jtm.map(v => v, {
+    const data = await user.map(v => v, {
       where: { id: 1 }
     })
     console.log(data) // [{ id:1, nickname: "yxjorhs", user_phone: "15911111111" }]
 
-    const data2 = await jtm.map(v => v, {
+    const data2 = await user.map(v => v, {
       where: { id: 1 },
       select: ["id"] // the sql would not left join phone table when no need user_phone
     })
