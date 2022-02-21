@@ -1,18 +1,20 @@
 import assert from 'assert';
 import knex from 'knex';
-import Where from './Where';
+import {Where, parse} from './Where';
+
+const FIND_LIMIT_MAX = Math.pow(2, 10);
 
 /**
  * build a model on multiple table, and use it like array,
  * for example: find, forEach, map...you could set option.where
  * or option.limit to reduce scan rows for database.
  */
-class JoinTableModel<
+export default class JoinTableModel<
   TRecord extends Record<string | number | symbol, any>
 > {
-  private _option: Required<JoinTableModel.Option<keyof TRecord>>
+  protected _option: Required<Option<keyof TRecord>>
 
-  private _joinFieldInfo = new Map<
+  protected _joinFieldInfo = new Map<
     keyof TRecord,
     { field: string, path: [string, string, string][]}
   >()
@@ -20,7 +22,7 @@ class JoinTableModel<
   /**
    * @param {Option} option
    */
-  constructor(option: JoinTableModel.Option<keyof TRecord>) {
+  constructor(option: Option<keyof TRecord>) {
     this._option = {
       table: option.table,
       execute: option.execute,
@@ -44,7 +46,7 @@ class JoinTableModel<
    * @param {CountOption} option
    */
   public async count(
-      option: JoinTableModel.CountOption<TRecord>,
+      option: CountOption<TRecord>,
   ): Promise<number> {
     return this._search('count', option);
   }
@@ -56,7 +58,7 @@ class JoinTableModel<
    */
   public async find<S extends keyof TRecord>(
       predicate: (record: Pick<TRecord, S>) => boolean | Promise<boolean>,
-      option?: JoinTableModel.SearchOption<TRecord, S>,
+      option?: SearchOption<TRecord, S>,
   ) {
     const offset = 0;
     let limit = 1;
@@ -72,7 +74,7 @@ class JoinTableModel<
       });
       ret = list.find(predicate);
       if (ret !== undefined) break;
-      if (limit < N.FIND_LIMIT_MAX) limit *= 2;
+      if (limit < FIND_LIMIT_MAX) limit *= 2;
     }
 
     return ret;
@@ -85,7 +87,7 @@ class JoinTableModel<
    */
   public async forEach<S extends keyof TRecord>(
       cb: (v: Pick<TRecord, S>, index: number) => void,
-      option?: JoinTableModel.SearchOption<TRecord, S>,
+      option?: SearchOption<TRecord, S>,
   ) {
     option = option || {};
     let offset = option.offset || 0;
@@ -113,7 +115,7 @@ class JoinTableModel<
    */
   public async map<S extends keyof TRecord, T>(
       cb: (v: Pick<TRecord, S>, index: number) => T,
-      option?: JoinTableModel.SearchOption<TRecord, S>,
+      option?: SearchOption<TRecord, S>,
   ): Promise<T[]> {
     const ret: T[] = [];
 
@@ -128,24 +130,24 @@ class JoinTableModel<
    * @param {Object} option
    * @return {any}
    */
-  private async _search<S extends keyof TRecord>(
+  protected async _search<S extends keyof TRecord>(
       scene: 'count' | 'record',
-      option?: JoinTableModel.SearchOption<TRecord, S>,
+      option?: SearchOption<TRecord, S>,
   ) {
     assert(scene === 'count' || scene === 'record', 'scene invalid');
 
-    const opt = this._searchOptionCheck(scene, option);
+    const opt = this.searchOptionCheck(scene, option);
 
     const builder = knex({client: 'mysql2'})
         .queryBuilder()
         .table(`${this._option.table}`);
 
-    const leftJoinRet = this._searchLeftJoin(builder, opt);
+    const leftJoinRet = this.searchJoin(builder, opt);
     this._searchWhere(builder, leftJoinRet.fieldTableMap, opt);
 
     return scene === 'record' ?
-      this._searchRecord(builder, leftJoinRet.fieldTableMap, opt) :
-      this._searchCount(builder);
+      this.searchRecord(builder, leftJoinRet.fieldTableMap, opt) :
+      this.searchCount(builder);
   }
 
   /**
@@ -161,14 +163,14 @@ class JoinTableModel<
    * @param {Object} option
    * @return {Object}
    */
-  private _searchOptionCheck<
+  protected searchOptionCheck<
     S extends keyof TRecord,
   >(
       scene: 'count' | 'record',
-      option?: JoinTableModel.SearchOption<TRecord, S>,
+      option?: SearchOption<TRecord, S>,
   ) {
     const opt = <
-      Required<JoinTableModel.SearchOption<TRecord, S>>
+      Required<SearchOption<TRecord, S>>
     >(option || {});
 
     assert(typeof opt === 'object', 'option invalid');
@@ -201,9 +203,9 @@ class JoinTableModel<
    * @param {Object} opt
    * @return {Object}
    */
-  private _searchLeftJoin(
+  protected searchJoin(
       builder: knex.QueryBuilder,
-      opt: Required<JoinTableModel.SearchOption<TRecord, any>>,
+      opt: Required<SearchOption<TRecord, any>>,
   ) {
     /*
     1.avoid repeat left join.
@@ -279,7 +281,7 @@ class JoinTableModel<
    * @param {Map} fieldTableMap
    * @return {void}
    */
-  private _fieldParse(
+  protected _fieldParse(
       fieldAlias: keyof TRecord,
       fieldTableMap: Map<keyof TRecord, string>,
   ) {
@@ -300,10 +302,10 @@ class JoinTableModel<
    * @param {Map} fieldTableMap
    * @param {Object} opt
    */
-  private _searchWhere(
+  protected _searchWhere(
       builder: knex.QueryBuilder,
       fieldTableMap: Map<keyof TRecord, string>,
-      opt: Required<JoinTableModel.SearchOption<TRecord, any>>,
+      opt: Required<SearchOption<TRecord, any>>,
   ) {
     const fieldParseWhere: any = {};
     Object.entries(opt.where).forEach(
@@ -311,7 +313,7 @@ class JoinTableModel<
           (fieldParseWhere[this._fieldParse(field, fieldTableMap)] = condition);
         },
     );
-    Where.parseToSqlBuilder(builder, fieldParseWhere);
+    parse(builder, fieldParseWhere);
   }
 
   /**
@@ -319,7 +321,7 @@ class JoinTableModel<
    * @param {Object} builder
    * @return {number}
    */
-  private async _searchCount(builder: knex.QueryBuilder) {
+  protected async searchCount(builder: knex.QueryBuilder) {
     const qr = builder.count(`${this._option.table}.id as count`).toQuery();
     const [{count}] = await this._option.execute(qr);
     return count;
@@ -332,20 +334,23 @@ class JoinTableModel<
    * @param {Object} opt
    * @return {any}
    */
-  private async _searchRecord(
+  protected async searchRecord(
       builder: knex.QueryBuilder,
       fieldTableMap: Map<keyof TRecord, string>,
-      opt: Required<JoinTableModel.SearchOption<TRecord, any>>,
+      opt: Required<SearchOption<TRecord, any>>,
   ) {
     opt.orderBy.forEach(([field, forward]) => {
       builder.orderBy(this._fieldParse(field, fieldTableMap), forward);
     });
 
     const qr = builder
-        .select(opt.select.map((field) => {
-          if (field.indexOf('*') !== -1) return field;
-          return `${this._fieldParse(field, fieldTableMap)} as ${field}`;
-        }))
+        .select(
+            opt.select.map((field) => {
+              return field.indexOf('*') !== -1 ?
+            field :
+            `${this._fieldParse(field, fieldTableMap)} as ${field}`;
+            }),
+        )
         .offset(opt.offset)
         .limit(opt.limit)
         .toQuery();
@@ -354,42 +359,32 @@ class JoinTableModel<
   }
 }
 
-namespace JoinTableModel {
-  export type Join<K extends string | number | symbol> = {
+export type Option<K extends string | number | symbol> = {
+  table: string;
+  execute: (sql: string) => Promise<any>;
+  join?: {
     /** [right table, left field, right field][] */
     path: [string, string, string][];
     /** Record<fieldAlias, field> */
     select: Partial<Record<K, string>>;
-  };
+  }[];
+};
 
-  export type Option<K extends string | number | symbol> = {
-    table: string;
-    execute: (sql: string) => Promise<any>;
-    join?: Join<K>[];
-  };
+export type OrderBy<
+  T extends Record<string, any>
+> = [keyof T, 'asc' | 'desc'][]
 
-  export type OrderBy<
-    T extends Record<string, any>
-  > = [keyof T, 'asc' | 'desc'][]
+export type SearchOption<
+  T extends Record<string, any>,
+  Select extends keyof T
+> = Partial<{
+  offset: number;
+  limit: number;
+  select: Select[];
+  where: Where<T>;
+  orderBy: OrderBy<T>;
+}>
 
-  export type SearchOption<
-    T extends Record<string, any>,
-    Select extends keyof T
-  > = Partial<{
-    offset: number;
-    limit: number;
-    select: Select[];
-    where: Where.IWhere<T>;
-    orderBy: OrderBy<T>;
-  }>
-
-  export type CountOption<
-    T extends Record<string, any>
-  > = Pick<SearchOption<T, any>, 'where' | 'limit'>;
-}
-
-namespace N {
-  export const FIND_LIMIT_MAX = Math.pow(2, 10);
-}
-
-export default JoinTableModel;
+export type CountOption<
+  T extends Record<string, any>
+> = Pick<SearchOption<T, any>, 'where' | 'limit'>;
