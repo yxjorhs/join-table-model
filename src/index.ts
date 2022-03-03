@@ -307,13 +307,23 @@ export default class JoinTableModel<
       fieldTableMap: Map<keyof TRecord, string>,
       opt: Required<SearchOption<TRecord, any>>,
   ) {
-    const fieldParseWhere: any = {};
-    Object.entries(opt.where).forEach(
-        ([field, condition]) => {
-          (fieldParseWhere[this._fieldParse(field, fieldTableMap)] = condition);
-        },
-    );
-    parse(builder, fieldParseWhere);
+    const where = opt.where instanceof Array ?
+      opt.where :
+      [opt.where];
+
+    const whereNew = where.map((w) => {
+      const ret: any = {};
+
+      Object.entries(w).forEach(
+          ([field, condition]) => {
+            (ret[this._fieldParse(field, fieldTableMap)] = condition);
+          },
+      );
+
+      return ret;
+    });
+
+    parse(builder, whereNew);
   }
 
   /**
@@ -340,7 +350,10 @@ export default class JoinTableModel<
       opt: Required<SearchOption<TRecord, any>>,
   ) {
     opt.orderBy.forEach(([field, forward]) => {
-      builder.orderBy(this._fieldParse(field, fieldTableMap), forward);
+      builder.orderBy(
+          this._fieldParse(field, fieldTableMap),
+        forward.toLocaleLowerCase() as 'asc' | 'desc',
+      );
     });
 
     const qr = builder
@@ -372,7 +385,7 @@ export type Option<K extends string | number | symbol> = {
 
 export type OrderBy<
   T extends Record<string, any>
-> = [keyof T, 'asc' | 'desc'][]
+> = [keyof T, 'asc' | 'ASC' | 'desc' | 'DESC'][]
 
 export type SearchOption<
   T extends Record<string, any>,
@@ -381,7 +394,7 @@ export type SearchOption<
   offset: number;
   limit: number;
   select: Select[];
-  where: Where<T>;
+  where: Where<T> | Where<T>[];
   orderBy: OrderBy<T>;
 }>
 

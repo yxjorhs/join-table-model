@@ -5,7 +5,7 @@ import mysql from "mysql2";
 import JoinTableModel from "../src/index"
 
 describe('joinTableModel', () => {
-  let sql = "";
+  let sql: string = "";
 
   const connection = mysql.createConnection({
     host: "localhost",
@@ -71,6 +71,13 @@ describe('joinTableModel', () => {
     assert(res[0].id === 1)
     assert(res[0].nickname === "yxjorhs")
     assert(res[0].user_phone === "15911111111")
+
+    // or
+    await jtm.map(v => v, {
+      where: [{ id: 1 }, { id: 2 }]
+    })
+
+    assert(<string>sql === `select \`user\`.*, \`phone\`.\`phone\` as \`user_phone\` from \`user\` left join \`phone\` as \`phone\` on \`user\`.\`id\` = \`phone\`.\`user_id\` where (\`user\`.\`id\` = 1) or (\`user\`.\`id\` = 2) limit 1000`)
   })
 
   it("select", async () => {
